@@ -7,3 +7,5 @@
 .ruff_cache/
 .DS_Store
 tmp*/
+
+omop_onto_env/
