@@ -23,6 +23,7 @@ import operator
 import functools
 import re
 from collections import defaultdict
+import psycopg2
 
 import pandas as pd
 from owlready2 import (
@@ -38,16 +39,22 @@ from owlready2 import (
 )
 from rdflib import Graph, Literal, Namespace, URIRef, RDF, OWL
 
-OMOP_VERSION = "6.0"
-OMOP_VERSION_MAJOR = int(float(OMOP_VERSION))
+# Get the current OMOP CDM Stucture in csv
+
+OMOP_VERSION = "5.3"
+#OMOP_VERSION_MAJOR = int(float(OMOP_VERSION))
 # Path to the OMOP-CDM CSV specification file
 # You can get the CSV file from: https://github.com/OHDSI/CommonDataModel/tree/main/inst/csv
-OMOP_CDM_FIELD_CSV = f"https://raw.githubusercontent.com/OHDSI/CommonDataModel/main/inst/csv/OMOP_CDMv{OMOP_VERSION}_Field_Level.csv"
-OMOP_CDM_TABLE_CSV = f"https://raw.githubusercontent.com/OHDSI/CommonDataModel/main/inst/csv/OMOP_CDMv{OMOP_VERSION}_Table_Level.csv"
+#OMOP_CDM_FIELD_CSV = f"https://raw.githubusercontent.com/OHDSI/CommonDataModel/main/inst/csv/OMOP_CDMv{OMOP_VERSION}_Field_Level.csv"
+#OMOP_CDM_TABLE_CSV = f"https://raw.githubusercontent.com/OHDSI/CommonDataModel/main/inst/csv/OMOP_CDMv{OMOP_VERSION}_Table_Level.csv"
+
+OMOP_CDM_FIELD_CSV = "omop_cdm_field_structure.csv"
+OMOP_CDM_TABLE_CSV = "omop_cdm_table_structure.csv"
+
 
 # Path where the OMOP-CDM ontology file will be created
-OMOP_ONTOLOGY_FILE = f"omop_cdm_v{OMOP_VERSION_MAJOR}.ttl"
-OMOP_ONTOLOGY_URL = "https://w3id.org/omop/ontology/"
+OMOP_ONTOLOGY_FILE = f"omop_cdm_v{OMOP_VERSION}.ttl"
+OMOP_ONTOLOGY_URL = f"http://ontology/omop-v{OMOP_VERSION}/"
 
 print(
     f"🦉 Generating OWL ontology <{OMOP_ONTOLOGY_URL}> for OMOP CDM version {OMOP_VERSION}"
@@ -305,11 +312,11 @@ for nom in TABLES:
         cls.omop_cdm_name = nom
         cls.label = separate_words(nom.capitalize())
         # Add table description from OMOP Table CSV
-        description = table_df.loc[
-            table_df["cdmTableName"] == nom, "tableDescription"
-        ].values
-        if description.size > 0:
-            cls.comment.en.append(description[0])
+        #description = table_df.loc[
+        #    table_df["cdmTableName"] == nom, "tableDescription"
+        #].values
+        #if description.size > 0:
+        #    cls.comment.en.append(description[0])
 
         table_2_owl[nom] = cls
 
@@ -335,12 +342,11 @@ for nom in TABLES:
             cls.is_a = [ClinicalElement]
 
 ABSTRACT_CLASSES = [ClinicalElement, BaseVisit, Exposure, Occurrence, Era, BasePerson]
-
 for (
     table,
     field,
-    required,
     type,
+    required,
     userGuidance,
     etlConventions,
     isPrimaryKey,
@@ -445,7 +451,15 @@ for (
                 range = str
             elif type.startswith("FLOAT"):
                 range = float
+            elif type.startswith("NUMERIC"):
+                range = float
+            elif type.startswith("TEXT"):
+                range = str
             elif type.startswith("DATETIME"):
+                if FIX_DATETIME and field.endswith("_date"):
+                    nom_owl.replace("_date", "_datetime")
+                range = datetime.datetime
+            elif type.startswith("TIMESTAMP"):
                 if FIX_DATETIME and field.endswith("_date"):
                     nom_owl.replace("_date", "_datetime")
                 range = datetime.datetime
@@ -636,7 +650,7 @@ for onto_subj in g.subjects(predicate=RDF.type, object=OWL.Ontology):
             Literal(OMOP_ONTOLOGY_URL),
         )
     )
-g.serialize(OMOP_ONTOLOGY_FILE, format="ttl")
+g.serialize(OMOP_ONTOLOGY_FILE, format="json-ld")
 
 # NOTE: to add dcterms:description:
 # dcterms_onto = default_world.get_ontology("http://purl.org/dc/terms/").load()
